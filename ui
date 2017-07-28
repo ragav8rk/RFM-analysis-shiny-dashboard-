@@ -1,0 +1,81 @@
+require(plotly)
+require(shinydashboard)
+require(dplyr)
+dashboardPage(skin = "green",
+              dashboardHeader(title = "RFM ANALYSIS"),
+              
+              dashboardSidebar(
+                dateRangeInput('dateRange',
+                               label = 'Date range',
+                               start = Sys.Date()-7 , end = Sys.Date()),
+                sidebarMenu(
+                  
+                  menuItem("HOME", tabName = "HOME"),
+                  menuItem("SALES", tabName = "SALES")
+                  
+                )
+                
+                
+              ),
+              dashboardBody(
+                tabItems(
+                  tabItem("HOME",
+                          fluidRow(
+                            valueBoxOutput("sales"),
+                            valueBoxOutput("orders"),
+                            valueBoxOutput("visitors")
+                          ),
+                          fluidRow(
+                            box(
+                              width = 8, status = "primary",
+                              collapsible = TRUE,
+                              title = "CustomerSegmentation",
+                              plotlyOutput("Plot1", width = "100%", height = 450)
+                            ),
+                            box(
+                              width = 4, status = "primary",
+                              collapsible = TRUE,
+                              title = "Recent orders",
+                              tableOutput("packageTable")
+                            )
+                          )
+                  ),
+                  tabItem("SALES",
+                          fluidRow(
+                            valueBoxOutput("sales1"),
+                            valueBoxOutput("orders1"),
+                            valueBoxOutput("visitors1")
+                          ),
+                          fluidRow(
+                            box(
+                              width = 6, status = "primary",
+                              collapsible = TRUE,
+                              title = "ORDERS",
+                              plotlyOutput("Plot2", width = "100%", height = 200)
+                            ),
+                            box(
+                              width = 6, status = "primary",
+                              collapsible = TRUE,
+                              title = "SALES",
+                              plotlyOutput("Plot3",width = "100%",height = 200)
+                            ),
+                            box(
+                              width = 8, status = "primary",
+                              collapsible = TRUE,
+                              title = "Customer segmentation",
+                              plotlyOutput("Plot4", width = "100%", height = 200)
+                            ),
+                            box(
+                              width = 4, status = "primary",
+                              collapsible = TRUE, 
+                              title = "customers",
+                              tableOutput("packageTable1")
+                            )
+                          )
+                          
+                  )
+                  
+                )
+              )
+              
+)
