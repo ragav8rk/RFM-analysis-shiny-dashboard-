@@ -1,1 +1,205 @@
-
+function(input, output, session) {  
+  
+  d<-read.csv("rfm.csv")  
+  d<-d[order(d$order_date),]
+  
+  d1<-with(d,d[(d$order_date<=as.Date(Sys.time())),])
+  d1$order_date<-as.Date(d1$order_date)
+  d1<-na.omit(d1)
+  recentsale<-d1[,c(3,4)]
+  names(recentsale)<-c("Customer","Totalsale")
+  rs<-recentsale[(length(recentsale$Customer)-10):length(recentsale$Customer),]
+  
+  order<-aggregate(d1[c("order_id")],by=d1["order_date"],FUN = length)
+  sale<-aggregate(d[c("grand_total")],by=d["order_date"],FUN = sum)
+  sale$order_date<-as.Date(sale$order_date)
+  sale<-na.omit(sale)
+  ordervalue<-sum(order$order_id)
+  salesvalue<-paste(sum(sale$grand_total),"$",sep ="")
+  
+  #today sales & order
+  order1<-with(order,order[(as.Date(order$order_date)==as.Date(Sys.time())),])
+  sale1<-with(sale,sale[(as.Date(sale$order_date)==as.Date(Sys.time())),])
+  sale1<-na.omit(sale1)
+  ordervalue1<-sum(order1$order_id)
+  salesvalue1<-sum(sale1$grand_total)
+  
+  d$recency=round(as.numeric(difftime(max(d$order_date),d[,1],units="days")) )
+  M<-aggregate(d$grand_total,list(d$customer),sum)
+  F<-aggregate(d$grand_total,list(d$customer),length)
+  names(F)<-c("customer","Frequency")
+  R<-aggregate(d$recency,list(d$customer),min)
+  names(R)<-c("customer","Recency")
+  T<-merge(F,R,by= "customer")
+  names(M)<-c("customer","Monetary")
+  RFM<-merge(T,M,by= "customer")
+  RFM$rankR=cut(RFM$Recency, 5,labels=FALSE)
+  RFM$rankF=cut(RFM$Frequency, 5,labels= FALSE)
+  RFM$rankM=cut(RFM$Monetary, 5,labels= FALSE)
+  RFMscore<-""
+  i<-1
+  k<-length(RFM$customer)
+  for(i in 1:k)
+  {
+    RFMscore[i]<-paste(RFM$rankR[i],RFM$rankF[i],RFM$rankM[i],sep = "")
+    i<-i+1
+  }
+  RFMscore<-as.data.frame(RFMscore)
+  new<-cbind(RFM,RFMscore)
+  new1<-new[with(new, order(rankR,-rankF,-rankM)), ]
+  #here i just split the customers into 5 segments manually 
+  new1$segment = "NA"
+  new1$segment[which(new1$RFMscore == 152 | new1$RFMscore == 143 | new1$RFMscore == 133 )] = "Best customer"
+  new1$segment[which(new1$RFMscore == 142 | new1$RFMscore == 132 | new1$RFMscore == 125 | new1$RFMscore == 124 | new1$RFMscore == 123 | new1$RFMscore == 243 | new1$RFMscore == 242 | new1$RFMscore == 233 )] = "Loyal"
+  new1$segment[which(new1$RFMscore == 311 | new1$RFMscore == 321 | new1$RFMscore == 322 |new1$RFMscore == 323 |new1$RFMscore == 231 |new1$RFMscore == 232 |new1$RFMscore == 224 |new1$RFMscore == 222 |new1$RFMscore == 221 |new1$RFMscore == 213 |new1$RFMscore == 211 |new1$RFMscore == 141 |new1$RFMscore == 131 )] = "Attention required"
+  new1$segment[which(new1$RFMscore == 511 |new1$RFMscore == 411 |new1$RFMscore == 412 |new1$RFMscore == 421 )] = "Lost"
+  new1$segment[which(new1$RFMscore == 122 |new1$RFMscore == 121 |new1$RFMscore == 113 |new1$RFMscore == 112 | new1$RFMscore == 111)] = "New"
+ 
+  df<-aggregate(new1$customer,by=new1["segment"],FUN = length)
+  df<-df[order(df$x),]
+  names(df)<-c("Segment","count")
+  
+  
+  output$sales <- renderValueBox({
+    valueBox(
+      value =salesvalue1 ,
+      subtitle = "sales",
+      icon = icon("area-chart"),
+      color = "maroon"
+    )
+  })
+  
+  output$orders <- renderValueBox({
+    valueBox(
+      value = ordervalue1,
+      subtitle = "orders",
+      icon = icon("area-chart"),
+      color = "purple"
+    )
+  })
+  
+  output$visitors <- renderValueBox({
+    valueBox(
+      value = ordervalue1 ,
+      subtitle = "visitors",
+      icon = icon("users"),
+      color = "yellow"
+    )
+  })
+  
+  output$Plot1 <- renderPlotly({
+    p <- plot_ly( data = new1, x = ~new1$Recency, y = ~new1$Frequency, z = ~new1$Monetary, color = ~new1$segment, colors = c('#00CC66', '#000066','#004C99','#FFFF33','#006666')) %>%
+      add_markers() %>%
+      layout(scene = list(xaxis = list(title = 'Recency'),
+                          yaxis = list(title = 'Frequency'),
+                          zaxis = list(title = 'Monetary')))
+    
+  })
+  
+  output$Plot2 <- renderPlotly({
+    
+    validate(
+      need(input$dateRange[1] <= input$dateRange[2], "Please provide proper date input")
+    )
+    
+    D1<-as.Date(input$dateRange[1],"%m/%d/%Y")
+    D2<-as.Date(input$dateRange[2],"%m/%d/%Y")
+    order2<-with(order,order[(order$order_date>=D1 & order$order_date<=D2),])
+    sale2<-with(sale,sale[(sale$order_date>=D1 & sale$order_date<=D2),])
+    u <- plot_ly(data = order2, x = ~order2$order_date, y = ~order2$order_id,type = 'bar',color = 'rgba(222,45,38,0.8)')%>%
+      layout(
+        xaxis = list(title = 'Date'),
+        yaxis = list(title = 'Orders'))
+    
+    
+  })
+  
+  output$sales1 <- renderValueBox({
+    
+    D1<-as.Date(input$dateRange[1],"%m/%d/%Y")
+    D2<-as.Date(input$dateRange[2],"%m/%d/%Y")
+    sale2<-with(sale,sale[(sale$order_date>=D1 & sale$order_date<=D2),])
+    salesvalue2<-sum(sale2$grand_total)
+    valueBox(
+      
+      value =salesvalue2 ,
+      subtitle = "sales",
+      icon = icon("area-chart"),
+      color = "maroon"
+    )
+  })
+  
+  output$orders1 <- renderValueBox({
+    
+    D1<-as.Date(input$dateRange[1],"%m/%d/%Y")
+    D2<-as.Date(input$dateRange[2],"%m/%d/%Y")
+    order2<-with(order,order[(order$order_date>=D1 & order$order_date<=D2),])
+    ordervalue2<-sum(order2$order_id)
+    
+    valueBox(
+      value = ordervalue2,
+      subtitle = "orders",
+      icon = icon("area-chart"),
+      color = "purple"
+    )
+  })
+  
+  output$visitors1 <- renderValueBox({
+    
+    
+    
+    D1<-as.Date(input$dateRange[1],"%m/%d/%Y")
+    D2<-as.Date(input$dateRange[2],"%m/%d/%Y")
+    order2<-with(order,order[(order$order_date>=D1 & order$order_date<=D2),])
+    ordervalue2<-sum(order2$order_id)
+    
+    valueBox(
+      value = ordervalue2 ,
+      subtitle = "visitors",
+      icon = icon("users"),
+      color = "yellow"
+    )
+  })
+  
+  
+  output$Plot3 <- renderPlotly({
+    
+    validate(
+      need(input$dateRange[1] <= input$dateRange[2], "Please provide proper date input")
+    )
+    
+    D1<-as.Date(input$dateRange[1],"%m/%d/%Y")
+    D2<-as.Date(input$dateRange[2],"%m/%d/%Y")
+    order2<-with(order,order[(order$order_date>=D1 & order$order_date<=D2),])
+    sale2<-with(sale,sale[(sale$order_date>=D1 & sale$order_date<=D2),])
+    v <- plot_ly(data = sale2, x = ~sale2$order_date, y = ~sale2$grand_total,type = 'bar',color = 'rgba(222,45,38,0.8)')%>%
+      layout(
+        xaxis = list(title = 'Date'),
+        yaxis = list(title = 'Sales'))
+   
+    
+  })
+  
+  output$Plot4 <- renderPlotly({
+    
+    q <- new1 %>%
+      group_by(segment) %>%
+      summarize(count = n()) %>%
+      plot_ly(labels = ~segment, values = ~count) %>%
+      add_pie(hole = 0.6) %>%
+      layout(title = "customer segmentation",  showlegend = F,
+             xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+             yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+    
+  })
+  
+  
+  
+  output$packageTable <- renderTable({
+    rs})
+  
+  output$packageTable1 <- renderTable({
+    df})
+  
+  
+}
